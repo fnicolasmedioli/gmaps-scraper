@@ -3,6 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const events = require("events");
 const { Keyboard } = require("./keyboard.js");
+const emails = require("./emails.js");
+
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -153,12 +155,13 @@ class GMapsScraper {
         .then(this.#onPageLoad.bind(this))
         .catch(console.error);
 
-        await Page.navigate({url: "https://www.google.com/maps/search/"});
+        // await Page.navigate({url: "https://www.google.com/maps/search/"});
         return Promise.resolve();
     }
 
     async #onPageLoad()
     {
+        /*
         const { DOM } = this.#client;
 
         const docNodeId = (await DOM.getDocument()).root.nodeId;
@@ -171,13 +174,12 @@ class GMapsScraper {
             nodeId: searchInput
         });
 
-        await this.#keyboard.writeText(this.#search);
-        this.#keyboard.intro();
+        // wait this.#keyboard.writeText(this.#search);
+        // this.#keyboard.intro();
 
+        
         await sleep(1000*3);
-
         let placeListLength = await this.#getPlaceListLength();
-
         while (true)
         {
             // Scroll till end of place list
@@ -189,6 +191,9 @@ class GMapsScraper {
             if (placeListLength == temp)
                 break;
 
+            if (temp > 25)
+                break;
+
             placeListLength = await this.#getPlaceListLength();
         }
 
@@ -197,6 +202,7 @@ class GMapsScraper {
             await this.#clickPlace(n);
             await sleep(1000*1.5);
         }
+        */
     }
 
     #parsePlaceData(responseBody)
@@ -236,7 +242,7 @@ class GMapsScraper {
         });
     }
 
-    #handlePlaceResponse(responseData)
+    async #handlePlaceResponse(responseData)
     {
         const responseBody = responseData.body;
         const placeObj = this.#parsePlaceData(responseBody);
@@ -249,7 +255,10 @@ class GMapsScraper {
         if (!placeData)
             throw new Error("Error while extracting placeObj data")
 
-        this.#eventManager.emit("placeData");
+        // this.#eventManager.emit("placeData");
+
+        if (placeData.web_url)
+            placeData.emails = await emails.findEmails(placeData.web_url);
 
         this.#savePlace(placeData)
         .then()
@@ -279,18 +288,14 @@ GMapsScraper.extractData = function(placeObj) {
         
         if (objHorarios)
             for (let day of objHorarios)
-            {
-                let rangos = "";
-
                 data.openHours.push({
                     "day": day?.[0],
                     "hours": day?.[1]
                 });
-            }
 
         data.reviewCount = Number(placeObj[6]?.[4]?.[8]);
         data.stars = Number(placeObj[6]?.[4]?.[7]);
-        data.web_url = placeObj[6]?.[7]?.[0];
+        data.web_url = placeObj[6]?.[7]?.[0] || null;
 
         data.currentState = placeObj[6]?.[34]?.[4]?.[4];
         data.id = placeObj[6]?.[10];
