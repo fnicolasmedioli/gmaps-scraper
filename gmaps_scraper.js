@@ -5,9 +5,28 @@ const events = require("events");
 const { Keyboard } = require("./keyboard.js");
 const emails = require("./emails.js");
 
+const idsFileName = "aa_id.json";
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getIDS(path)
+{
+    try
+    {
+        const data = fs.readFileSync(path, {
+            encoding: "utf8", flag: "r"
+        });
+        return JSON.parse(data);
+    }
+    catch
+    {
+        fs.writeFileSync(path, "[]", {
+            encoding: "utf8"
+        });
+        return [];
+    }
 }
 
 class GMapsScraper {
@@ -16,10 +35,9 @@ class GMapsScraper {
     /* ID de la ultima peticion a /.../place */
     #place_request_id;
     #config;
-    #keyboard;
-    #search;
     #domScript;
     #eventManager;
+    #idsFile;
 
     constructor(cfg)
     {
@@ -38,6 +56,8 @@ class GMapsScraper {
                 if (err)
                     throw new Error(err);
             });
+        
+        this.#idsFile = getIDS(path.join(this.#config.data_folder, idsFileName));
         
         this.#eventManager = new events.EventEmitter();
     }
@@ -59,15 +79,10 @@ class GMapsScraper {
         });
     }
 
-    #scrollPlaceList()
+    async #scrollPlaceList()
     {
-        this.#client.Input.dispatchMouseEvent({
-            type: "mouseWheel",
-            x: 0,
-            y: 200,
-            deltaX: 0,
-            deltaY: 1000
-        });
+        await this.#executeScript(`scrollPlaceList();`);
+        return Promise.resolve();
     }
 
     async #craftScript(code)
@@ -77,30 +92,55 @@ class GMapsScraper {
         return script;
     }
 
-    async #clickPlace(n=1)
+    async #executeScript(expr)
     {
-        const script = await this.#craftScript(`clickPlace(${n});`);
-        const salida = await this.#client.Runtime.evaluate({
+        const script = await this.#craftScript(expr);
+        const output = await this.#client.Runtime.evaluate({
             expression: script
         });
+        return Promise.resolve(output);
+    }
+
+    async #clickPlace(n=1)
+    {
+        const r = await this.#executeScript(`clickPlace(${n});`);
         return Promise.resolve();
     }
 
     async #getPlaceListLength()
     {
-        const script = await this.#craftScript(`return getPlaceListLength();`);
-        const output = await this.#client.Runtime.evaluate({
-            expression: script
-        });
-        return Promise.resolve(output["result"]["value"]);
+        const r = await this.#executeScript(`return getPlaceListLength();`);
+        return Promise.resolve(r["result"]["value"]);
     }
 
-    async scrape(search)
+    async #loadingPlaces()
     {
-        if (!search || typeof(search) != "string")
-            return Promise.reject();
+        const r = await this.#executeScript(`return loadingPlaces();`);
+        return Promise.resolve(r["result"]["value"]);
+    }
 
-        this.#search = search;
+    async #getPlacesID()
+    {
+        const r = await this.#executeScript(`return getPlacesID();`);
+        try {
+            return Promise.resolve(JSON.parse(r["result"]["value"]));
+        }
+        catch {
+            console.log("Excepcion en getPlacesID");
+            console.log(r);
+            return [];
+        }
+    }
+
+    #isIDRegistered(underscoreID)
+    {
+        return this.#idsFile.includes(underscoreID);
+    }
+
+    async scrape()
+    {
+        // if (!search || typeof(search) != "string")
+        //     return Promise.reject();
 
         return new Promise((resolve, reject) => {
 
@@ -149,14 +189,69 @@ class GMapsScraper {
         await DOM.enable();
         await Runtime.enable();
 
-        this.#keyboard = new Keyboard(Input);
+        // this.#keyboard = new Keyboard(Input);
     
+        /*
         Page.loadEventFired()
         .then(this.#onPageLoad.bind(this))
         .catch(console.error);
+        */
+
+        this.#run();
 
         // await Page.navigate({url: "https://www.google.com/maps/search/"});
         return Promise.resolve();
+    }
+
+    async #run()
+    {
+        // Scrollear hasta el final
+
+        /*
+        let placeCount = await this.#getPlaceListLength();
+
+        // agregar que si se buguea empezar igual
+
+        while (true)
+        {
+            await this.#scrollPlaceList();
+            await sleep(500);
+            
+            let newPlaceCount = await this.#getPlaceListLength();
+            const isLoading = await this.#loadingPlaces();
+
+            if (placeCount == newPlaceCount && !isLoading)
+                break;
+            
+            placeCount = newPlaceCount;
+        }*/
+
+        // Clickear todos los botones
+
+        const tempIDS = [];
+
+        while (true)
+        {
+            const placesID = await this.#getPlacesID();
+            
+            for (let i = 1; i <= placesID.length; i++)
+            {
+                const underscoreID = placesID[i-1].replace(":", "_");
+
+                if (!this.#isIDRegistered(underscoreID) && !tempIDS.includes(underscoreID))
+                {
+                    tempIDS.push(underscoreID);
+                    this.#clickPlace(i);
+
+                    await Promise.any([
+                        events.once(this.#eventManager, "placeData"),
+                        sleep(1000*3)
+                    ]);
+                }
+            }
+            
+            await sleep(200);
+        }
     }
 
     async #onPageLoad()
@@ -177,7 +272,6 @@ class GMapsScraper {
         // wait this.#keyboard.writeText(this.#search);
         // this.#keyboard.intro();
 
-        
         await sleep(1000*3);
         let placeListLength = await this.#getPlaceListLength();
         while (true)
@@ -223,13 +317,11 @@ class GMapsScraper {
     {
         const dataStr = JSON.stringify(placeData, null, 3);
 
-        let filename = (placeData.name + "_")
-                        .replace(/[^a-z0-9_\-]/gi, "_")
-                        .replace(/_{2,}/g, '_')
-                        .toLowerCase()
-                        + placeData.id.slice(2, 10) + ".json";
+        const underscoreID = placeData.id.replace(":", "_");
+
+
     
-        let fullPath = path.join(this.#config.data_folder, filename);
+        let fullPath = path.join(this.#config.data_folder, underscoreID);
 
         return new Promise((resolve, reject) => {
 
@@ -237,7 +329,11 @@ class GMapsScraper {
                 if (err)
                     reject(new Error("Error while saving data in disk"));
                 else
+                {
+                    this.#idsFile.push(underscoreID);
+                    fs.writeFileSync(path.join(this.#config.data_folder, idsFileName), JSON.stringify(this.#idsFile));
                     resolve();
+                }
             });
         });
     }
@@ -255,7 +351,7 @@ class GMapsScraper {
         if (!placeData)
             throw new Error("Error while extracting placeObj data")
 
-        // this.#eventManager.emit("placeData");
+        this.#eventManager.emit("placeData");
 
         if (placeData.web_url)
             placeData.emails = await emails.findEmails(placeData.web_url);

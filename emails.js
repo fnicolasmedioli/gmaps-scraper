@@ -84,7 +84,7 @@ async function extractData(url)
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"
             },
-            timeout: 1000*5
+            timeout: 1000*3
         }));
 
         html = response?.data;
@@ -94,8 +94,6 @@ async function extractData(url)
     }
     catch (e)
     {
-        console.error(e);
-
         return Promise.resolve({
             urls: [],
             emails: []
@@ -110,7 +108,8 @@ async function extractData(url)
 }
 
 async function findEmails(url)
-{    
+{
+    console.log("Buscando emails para: " + url);
     let { urls, emails } = await extractData(url);
 
     for (const subUrl of urls)
