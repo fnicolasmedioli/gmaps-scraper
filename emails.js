@@ -6,6 +6,16 @@ const SOLO_CONTACT = true;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const notInterestingExtensions = [".gif", ".jpg", ".jpeg", ".css", ".js", ".svg", ".png", ".json"];
+const notInterestingPages = ["facebook", "instagram"];
+
+function interestingUrl(url)
+{
+    const t = url.toLowerCase();
+    for (const q of notInterestingPages)
+        if (t.includes(q))
+            return false;
+    return true;
+}
 
 function notInterestingExtensionInText(t)
 {
@@ -109,6 +119,9 @@ async function extractData(url)
 
 async function findEmails(url)
 {
+    if (!interestingUrl(url))
+        return Promise.resolve([]);
+
     let { urls, emails } = await extractData(url);
 
     for (const subUrl of urls)
@@ -117,6 +130,19 @@ async function findEmails(url)
         for (const subEmail of subUrlEmails)
             emails.add(subEmail);
     }
+
+    try
+    {
+        const t = new nodeUrl.URL(url);
+        const urlBase = t.protocol + "//" + t.host + "/";
+        if (urlBase != url)
+        {
+            const baseEmails = (await extractData(urlBase)).emails;
+            for (const subEmail of baseEmails)
+                emails.add(subEmail);
+        }         
+    }
+    catch {}
 
     const result = Array(...emails);
 

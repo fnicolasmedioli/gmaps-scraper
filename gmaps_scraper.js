@@ -5,7 +5,7 @@ const events = require("events");
 const { Keyboard } = require("./keyboard.js");
 const emails = require("./emails.js");
 
-const idsFileName = "aa_id.json";
+const idsFileName = "AAA_id.json";
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -32,7 +32,6 @@ function getIDS(path)
 class GMapsScraper {
 
     #client;
-    /* ID de la ultima peticion a /.../place */
     #place_request_id;
     #config;
     #domScript;
@@ -89,6 +88,17 @@ class GMapsScraper {
         return Promise.resolve();
     }
 
+    async #scrollAntiBug()
+    {
+        this.#client.Input.dispatchMouseEvent({
+            type: "mouseWheel",
+            x: 0,
+            y: 200,
+            deltaX: 0,
+            deltaY: -150
+        });
+    }
+
     async #craftScript(code)
     {
         const baseScript = await this.#getDOMScript();
@@ -143,9 +153,6 @@ class GMapsScraper {
 
     async scrape()
     {
-        // if (!search || typeof(search) != "string")
-        //     return Promise.reject();
-
         return new Promise((resolve, reject) => {
 
             this.#connectChrome()
@@ -200,8 +207,6 @@ class GMapsScraper {
 
     async #run()
     {
-        // Clickear todos los botones
-
         while (true)
         {
             const placesID = await this.#getPlacesID();
@@ -230,8 +235,12 @@ class GMapsScraper {
                 }
             }
 
-            // if (!clickedSomething)
-            //     this.#scrollPlaceList();
+            if (!clickedSomething)
+            {
+                this.#scrollPlaceList();
+                await sleep(100);
+                this.#scrollAntiBug();
+            }
             
             await sleep(500);
         }
@@ -300,6 +309,8 @@ class GMapsScraper {
             if (placeData.emails.length > 0)
                 console.log("Emails encontrados para " + placeData.nombre + ": " + JSON.stringify(placeData.emails));
         }
+        else
+            placeData.emails = [];
 
         this.#savePlace(placeData)
         .then(() => {
