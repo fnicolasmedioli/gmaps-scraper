@@ -38,12 +38,15 @@ class GMapsScraper {
     #domScript;
     #eventManager;
     #idsFile;
+    #clickCount;
 
     constructor(cfg)
     {
         this.#config = {
             data_folder: "./data/"
         };
+
+        this.#clickCount = {};
 
         if (cfg)
             for (const key in cfg)
@@ -102,9 +105,9 @@ class GMapsScraper {
         return Promise.resolve(output);
     }
 
-    async #clickPlace(n=1)
+    async #clickPlace(id)
     {
-        const r = await this.#executeScript(`clickPlace(${n});`);
+        const r = await this.#executeScript(`clickPlace("${id}");`);
         return Promise.resolve();
     }
 
@@ -190,122 +193,53 @@ class GMapsScraper {
         await DOM.enable();
         await Runtime.enable();
 
-        // this.#keyboard = new Keyboard(Input);
-    
-        /*
-        Page.loadEventFired()
-        .then(this.#onPageLoad.bind(this))
-        .catch(console.error);
-        */
-
         this.#run();
 
-        // await Page.navigate({url: "https://www.google.com/maps/search/"});
         return Promise.resolve();
     }
 
     async #run()
     {
-        // Scrollear hasta el final
-
-        (async () => {
-
-            while (true)
-            {
-                await this.#scrollPlaceList();
-                await sleep(1000);
-            }
-
-        })();
-
-        /*
-        let placeCount = await this.#getPlaceListLength();
-        while (true)
-        {
-            await this.#scrollPlaceList();
-            await sleep(500);
-            
-            let newPlaceCount = await this.#getPlaceListLength();
-            const isLoading = await this.#loadingPlaces();
-
-            if (placeCount == newPlaceCount && !isLoading)
-                break;
-            
-            placeCount = newPlaceCount;
-        }
-        */
-
         // Clickear todos los botones
-
-        const tempIDS = [];
 
         while (true)
         {
             const placesID = await this.#getPlacesID();
+
+            let clickedSomething = false;
             
             for (let i = 1; i <= placesID.length; i++)
             {
+                if (!(placesID[i-1] in this.#clickCount))
+                    this.#clickCount[placesID[i-1]] = 0;
+
                 const underscoreID = placesID[i-1].replace(":", "_");
 
-                if (!this.#isIDRegistered(underscoreID) && !tempIDS.includes(underscoreID))
+                if (this.#clickCount[placesID[i-1]] < 4 && !this.#isIDRegistered(underscoreID))
                 {
-                    tempIDS.push(underscoreID);
-                    this.#clickPlace(i);
+                    this.#clickPlace(placesID[i-1]);
+                    this.#clickCount[placesID[i-1]]++;
 
                     await Promise.any([
                         events.once(this.#eventManager, "placeData"),
                         sleep(1000*3)
                     ]);
+
+                    clickedSomething = true;
+                    break;
                 }
             }
+
+            // if (!clickedSomething)
+            //     this.#scrollPlaceList();
             
-            await sleep(200);
+            await sleep(500);
         }
     }
 
     async #onPageLoad()
     {
-        /*
-        const { DOM } = this.#client;
 
-        const docNodeId = (await DOM.getDocument()).root.nodeId;
-        const searchInput = (await DOM.querySelector({
-            nodeId: docNodeId,
-            selector: "#searchboxinput"
-        })).nodeId;
-
-        await DOM.focus({
-            nodeId: searchInput
-        });
-
-        // wait this.#keyboard.writeText(this.#search);
-        // this.#keyboard.intro();
-
-        await sleep(1000*3);
-        let placeListLength = await this.#getPlaceListLength();
-        while (true)
-        {
-            // Scroll till end of place list
-
-            this.#scrollPlaceList();
-            await sleep(1000*2);
-
-            const temp = await this.#getPlaceListLength();
-            if (placeListLength == temp)
-                break;
-
-            if (temp > 25)
-                break;
-
-            placeListLength = await this.#getPlaceListLength();
-        }
-
-        for (let n = 1; n <= placeListLength; n++)
-        {
-            await this.#clickPlace(n);
-            await sleep(1000*1.5);
-        }
-        */
     }
 
     #parsePlaceData(responseBody)
@@ -327,8 +261,6 @@ class GMapsScraper {
         const dataStr = JSON.stringify(placeData, null, 3);
 
         const underscoreID = placeData.id.replace(":", "_");
-
-
     
         let fullPath = path.join(this.#config.data_folder, underscoreID);
 
@@ -362,11 +294,17 @@ class GMapsScraper {
 
         this.#eventManager.emit("placeData");
 
-        if (placeData.web_url)
-            placeData.emails = await emails.findEmails(placeData.web_url);
+        if (placeData.web)
+        {
+            placeData.emails = await emails.findEmails(placeData.web);
+            if (placeData.emails.length > 0)
+                console.log("Emails encontrados para " + placeData.nombre + ": " + JSON.stringify(placeData.emails));
+        }
 
         this.#savePlace(placeData)
-        .then()
+        .then(() => {
+            console.log("Info de: \"" + placeData.nombre + "\" guardada");
+        })
         .catch(
             error => {
                 throw error;
@@ -380,11 +318,11 @@ GMapsScraper.extractData = function(placeObj) {
     {
         let data = {};
 
-        data.name = placeObj[6]?.[11];
-        data.address = placeObj[6]?.[2];
-        data.category = placeObj[6]?.[13];
-        data.phone = placeObj[6]?.[178]?.[0]?.[1]?.[1]?.[0];
-        data.openHours = [];
+        data.nombre = placeObj[6]?.[11];
+        data.direccion = placeObj[6]?.[2];
+        data.categoria = placeObj[6]?.[13];
+        data.telefono = placeObj[6]?.[178]?.[0]?.[1]?.[1]?.[0];
+        data.horarios = [];
 
         let objHorarios;
         const objHorariosStr = JSON.stringify(placeObj[6]?.[34]?.[1])?.replaceAll("\u2013", "-");
@@ -393,46 +331,44 @@ GMapsScraper.extractData = function(placeObj) {
         
         if (objHorarios)
             for (let day of objHorarios)
-                data.openHours.push({
-                    "day": day?.[0],
-                    "hours": day?.[1]
+                data.horarios.push({
+                    "dia": day?.[0],
+                    "hora": day?.[1]
                 });
 
-        data.reviewCount = Number(placeObj[6]?.[4]?.[8]);
-        data.stars = Number(placeObj[6]?.[4]?.[7]);
-        data.web_url = placeObj[6]?.[7]?.[0] || null;
+        data.cantidad_valoraciones = Number(placeObj[6]?.[4]?.[8]);
+        data.estrellas = Number(placeObj[6]?.[4]?.[7]);
+        data.web = placeObj[6]?.[7]?.[0] || null;
 
-        data.currentState = placeObj[6]?.[34]?.[4]?.[4];
+        data.estado_actual = placeObj[6]?.[34]?.[4]?.[4];
         data.id = placeObj[6]?.[10];
 
-        data.description = placeObj[6]?.[101]
+        data.descripcion = placeObj[6]?.[101]
                             || placeObj[6]?.[32]?.[1]?.[1];
 
-        data.reviews = [];
-        data.amenities = [];
-        data.accessibility = [];
+        data.valoraciones_destacadas = [];
+        data.comodidades = [];
+        data.accesibilidad = [];
 
         const commentsObj = placeObj[6]?.[52]?.[0];
         if (commentsObj)
             for (let comment of commentsObj)
-                data.reviews.push({
-                    person: {
-                        name: comment[0][1]
-                    },
-                    url: comment[0][0],
-                    timeAgo: comment[1],
+                data.valoraciones_destacadas.push({
+                    nombre_persona: comment[0][1],
+                    url_comentario: comment[0][0],
+                    antiguedad: comment[1],
                     texto: comment[3]
                 });
 
         const accessibilityObj = placeObj[6]?.[100]?.[1]?.[0]?.[2];
         if (accessibilityObj)
             for (const characteristic of accessibilityObj)
-                data.accessibility.push(characteristic[1]);
+                data.accesibilidad.push(characteristic[1]);
 
         const amenities = placeObj[6]?.[100]?.[1]?.[1]?.[2];
         if (amenities)
             for (const amenitie of amenities)
-                data.amenities.push(amenitie[1]);
+                data.comodidades.push(amenitie[1]);
 
         return data;
     }

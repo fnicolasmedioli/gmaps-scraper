@@ -1,16 +1,31 @@
 (() => {
 
-function clickPlace(n=1)
+function clickPlace(id)
 {
     const placeList = document.querySelectorAll("a[href^='https://www.google.com/maps/place/']");
 
-    if (placeList.length < n)
+    let toClick;
+
+    for (let placeA of placeList)
     {
-        console.log(`Didn't find "${n}" element`);
-        return;
+        try
+        {
+            if (placeA.getAttribute("href").includes(id))
+            {
+                toClick = placeA;
+                break;
+            }
+        }
+        catch
+        {
+            console.log("??????");
+        }
     }
 
-    placeList[n-1].click();
+    console.log("clickeando:", toClick);
+
+    if (toClick)
+        toClick.click();
 }
 
 function goBackToPlaceList()
