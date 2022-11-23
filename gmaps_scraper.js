@@ -207,11 +207,18 @@ class GMapsScraper {
     {
         // Scrollear hasta el final
 
+        (async () => {
+
+            while (true)
+            {
+                await this.#scrollPlaceList();
+                await sleep(1000);
+            }
+
+        })();
+
         /*
         let placeCount = await this.#getPlaceListLength();
-
-        // agregar que si se buguea empezar igual
-
         while (true)
         {
             await this.#scrollPlaceList();
@@ -224,7 +231,8 @@ class GMapsScraper {
                 break;
             
             placeCount = newPlaceCount;
-        }*/
+        }
+        */
 
         // Clickear todos los botones
 
