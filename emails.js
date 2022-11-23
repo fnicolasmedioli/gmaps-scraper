@@ -17,7 +17,7 @@ function notInterestingExtensionInText(t)
 
 function isContactUrl(url)
 {
-    const t = ["contact", "Contact", "CONTACT"];
+    const t = ["contact", "Contact", "CONTACT", "Contatto", "contatto", "CONTATTO"];
     for (const q of t)
         if (url.includes(q))
             return true;
@@ -109,7 +109,6 @@ async function extractData(url)
 
 async function findEmails(url)
 {
-    console.log("Buscando emails para: " + url);
     let { urls, emails } = await extractData(url);
 
     for (const subUrl of urls)
@@ -120,9 +119,6 @@ async function findEmails(url)
     }
 
     const result = Array(...emails);
-
-    console.log("Mails encontrados para: " + url);
-    console.log(result);
 
     return Promise.resolve(result);
 }

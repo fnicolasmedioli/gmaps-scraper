@@ -60,6 +60,7 @@ class GMapsScraper {
         this.#idsFile = getIDS(path.join(this.#config.data_folder, idsFileName));
         
         this.#eventManager = new events.EventEmitter();
+        this.#eventManager.setMaxListeners(0);
     }
 
     async #getDOMScript()
