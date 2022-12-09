@@ -5,7 +5,7 @@ const events = require("events");
 const { Keyboard } = require("./keyboard.js");
 const emails = require("./emails.js");
 
-const idsFileName = "AAA_id.json";
+const idsFileName = "place-list.json";
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -270,8 +270,10 @@ class GMapsScraper {
         const dataStr = JSON.stringify(placeData, null, 3);
 
         const underscoreID = placeData.id.replace(":", "_");
+
+        const fileName = underscoreID + ".json";
     
-        let fullPath = path.join(this.#config.data_folder, underscoreID);
+        let fullPath = path.join(this.#config.data_folder, fileName);
 
         return new Promise((resolve, reject) => {
 
@@ -307,14 +309,14 @@ class GMapsScraper {
         {
             placeData.emails = await emails.findEmails(placeData.web);
             if (placeData.emails.length > 0)
-                console.log("Emails encontrados para " + placeData.nombre + ": " + JSON.stringify(placeData.emails));
+                console.log("Emails found for " + placeData.name + ": " + JSON.stringify(placeData.emails));
         }
         else
             placeData.emails = [];
 
         this.#savePlace(placeData)
         .then(() => {
-            console.log("Info de: \"" + placeData.nombre + "\" guardada");
+            console.log("\"" + placeData.name + "\" saved");
         })
         .catch(
             error => {
@@ -329,62 +331,63 @@ GMapsScraper.extractData = function(placeObj) {
     {
         let data = {};
 
-        data.nombre = placeObj[6]?.[11];
-        data.direccion = placeObj[6]?.[2];
-        data.categoria = placeObj[6]?.[13];
-        data.telefono = placeObj[6]?.[178]?.[0]?.[1]?.[1]?.[0];
-        data.horarios = [];
+        data.name = placeObj[6]?.[11];
+        data.address = placeObj[6]?.[2];
+        data.category = placeObj[6]?.[13];
+        data.phone = placeObj[6]?.[178]?.[0]?.[1]?.[1]?.[0];
+        data.openHours = [];
 
-        let objHorarios;
-        const objHorariosStr = JSON.stringify(placeObj[6]?.[34]?.[1])?.replaceAll("\u2013", "-");
-        if (objHorariosStr)
-            objHorarios = JSON.parse(objHorariosStr);
+        let objHours;
+        const objHoursStr = JSON.stringify(placeObj[6]?.[34]?.[1])?.replaceAll("\u2013", "-");
+        if (objHoursStr)
+            objHours = JSON.parse(objHoursStr);
         
-        if (objHorarios)
-            for (let day of objHorarios)
-                data.horarios.push({
-                    "dia": day?.[0],
-                    "hora": day?.[1]
+        if (objHours)
+            for (let day of objHours)
+                data.openHours.push({
+                    "day": day?.[0],
+                    "hours": day?.[1]
                 });
 
-        data.cantidad_valoraciones = Number(placeObj[6]?.[4]?.[8]);
-        data.estrellas = Number(placeObj[6]?.[4]?.[7]);
+        data.reviewCount = Number(placeObj[6]?.[4]?.[8]);
+        data.stars = Number(placeObj[6]?.[4]?.[7]);
         data.web = placeObj[6]?.[7]?.[0] || null;
 
-        data.estado_actual = placeObj[6]?.[34]?.[4]?.[4];
+        data.currentState = placeObj[6]?.[34]?.[4]?.[4];
         data.id = placeObj[6]?.[10];
 
-        data.descripcion = placeObj[6]?.[101]
+        data.description = placeObj[6]?.[101]
                             || placeObj[6]?.[32]?.[1]?.[1];
 
-        data.valoraciones_destacadas = [];
-        data.comodidades = [];
-        data.accesibilidad = [];
+        data.someReviews = [];
+        data.amenities = [];
+        data.accessibility = [];
 
         const commentsObj = placeObj[6]?.[52]?.[0];
         if (commentsObj)
             for (let comment of commentsObj)
-                data.valoraciones_destacadas.push({
-                    nombre_persona: comment[0][1],
-                    url_comentario: comment[0][0],
-                    antiguedad: comment[1],
-                    texto: comment[3]
+                data.someReviews.push({
+                    personName: comment[0][1],
+                    url: comment[0][0],
+                    antiquity: comment[1],
+                    text: comment[3]
                 });
 
-        const accessibilityObj = placeObj[6]?.[100]?.[1]?.[0]?.[2];
+        const accessibilityObj = placeObj[6]?.[100]?.[1]?.[1]?.[2];
         if (accessibilityObj)
             for (const characteristic of accessibilityObj)
-                data.accesibilidad.push(characteristic[1]);
+                data.accessibility.push(characteristic[1]);
 
-        const amenities = placeObj[6]?.[100]?.[1]?.[1]?.[2];
+        const amenities = placeObj[6]?.[100]?.[1]?.[0]?.[2];        
         if (amenities)
             for (const amenitie of amenities)
-                data.comodidades.push(amenitie[1]);
+                data.amenities.push(amenitie[1]);
 
         return data;
     }
     catch(e)
     {
+        console.error(e);
         return null;
     }
 }

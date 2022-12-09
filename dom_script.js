@@ -22,8 +22,6 @@ function clickPlace(id)
         }
     }
 
-    console.log("clickeando:", toClick);
-
     if (toClick)
         toClick.click();
 }
